@@ -1,0 +1,127 @@
+---
+title: "Title of Your Report"
+author: "Zhengyu Ren - 1003802735 & Zhiyuan Liu - 1001439678"
+date: "2/11/2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+
+# Loading in the cleaned survey Data
+survey_data <- read_csv("outputs/survey_data.csv")
+
+# Loading in the cleaned census Data
+census_data <- read_csv("outputs/census_data.csv")
+
+```
+
+# Title of your Report
+
+## Name(s) of Author(s) ：Zhengyu Ren - 1003802735 & Zhiyuan Liu - 1001439678
+## Date：2/11/2020
+
+
+# Model
+
+Here we are interested in predicting the popular vote outcome of the 2020 American federal election. To do this we are employing a logistic technique and post-stratification technique for the variables we have selected from the 2018 American Census and Survey data about the election collected on 2020.06.25. In the following sub-sections I will describe the model specifics and the post-stratification calculation.
+
+
+## Model Specifics
+We will be using a multi-level logistic regression model (Bayesian) to model the proportion of voters who will vote for Donald Trump. This is a naive model. I will only be using age, which is recorded as a numeric variable, to model the probability of voting for Donald Trump. The simple linear regression model I am using is:
+
+$$ Y{ij} = \beta_{0j}+\beta_1  x_{age} + \epsilon$$
+Where $Y_{ij}$ represents the proportion of voters who will vote for Donald Trump. Similarly, $\beta_{0j}$ represents the intercept of the model, and is the probability of voting for Donald Trump at age 18 (the legal age to vote is 18 years old). Additionally, $\beta_1$ represents the slope of the model. So, for everyone one unit increase in age, we expect a $\beta_1$ increase in the probability of voting for Donald Trump.
+
+$$ \beta_{0j} = r_{00} + r_{01} + W_j + u_{0j}$$
+Where $\beta_{0j}$ represents the intercept of the model. and is the probability of voting for Donald Trump at age 18 (the legal age to vote is 18 years old). Similarly, $r_{00}$ represents the intercept of the intercept and $r_{01}$ is the slope. Additionally , $u_{0j}$ is the error.
+
+
+```{r, include=FALSE}
+#individual and group levels
+# Creating the Model
+
+install.packages("brms")
+library(brms)
+
+model_regression <- brm(vote_trump ~ as.factor(race_ethnicity) + as.factor(household_income) + 
+                          as.factor(education) +
+                          (1|state),  data = survey_data, family = bernoulli())
+
+summary(model_regression)
+ranef(model_regression)
+
+```
+
+## Post-Stratification 
+In this part we will present a post-stratification analysis to predict the probability of Donald Trump winning the election. 
+
+Here I create cells based off different ages. Using the model described in the previous sub-section I will estimate the proportion of voters in each age bin. I will then weight each proportion estimate (within each bin) by the respective population size of that bin and sum those values and divide that by the entire population size. 
+
+```{r, include=TRUE}
+
+# Here I will perform the post-stratification calculation
+install.packages('stringr')
+library(stringr)
+# Changing state name to match with survey_data$state
+census_data$state <- setNames(state.abb, state.name)[str_to_title(census_data$state)]
+# Matching two datasets
+census_data$race_ethnicity <- str_to_title(census_data$race_ethnicity)
+
+census_data$logodds_estimate <-
+  model_regression %>%
+  predict(newdata = census_data)
+
+census_data$estimate <-
+  exp(census_data$logodds_estimate)/(1+exp(census_data$logodds_estimate))
+
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  group_by(state)
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n))
+  
+add_predicted_draw()
+
+
+```
+
+# Additional Information 
+
+# Results
+
+Here you will include all results. This includes descriptive statistics, graphs, figures, tables, and model results. Please ensure that everything is well formatted and in a report style. You must also provide an explanation of the results in this section. 
+
+Please ensure that everything is well labelled. So if you have multiple histograms and plots, calling them Figure 1, 2, 3, etc. and referencing them as Figure 1, Figure 2, etc. in your report will be expected. The reader should not get lost in a sea of information. Make sure to have the results be clean, well formatted and digestible.
+
+# Discussion
+
+Here you will summarize the previous sections and discuss conclusions drawn from the results. Make sure to elaborate and connect your analysis to the goal of the study.
+
+## Weaknesses
+
+1.Limited Variables: We only chose a small amount of variables that we thought important from both of the census data   and the survey data, there maybe some variables ignored by us such as politic attitudes.
+
+2.Voters Segregation: In the Survey data, some variables roughly talk about the same thing, but are slightly           different, for example, "not_trump" asks if you would vote for Trump or someone else, "trump_biden" calls for an     answer that you have to choose one between Trump and Biden. "vote_2020" asks if you want to vote for Trump or Biden   or someone else. We chose to use "trump_biden" for analysis since this is the one that is closest to the current     situation, but there are cases when people actually want to vote for other candidates in June, but prefer Trump 
+  more than Biden. In these cases, we will predict them vote for Trump, but they might not actually.
+
+3.Time Span: Though we used the closest data set at hand, the census data was collected in 2018 and the survey data    was collected in June. Things may changed a lot during the times. 
+
+4.“Shy Trump” effect. Coy (2020) suggests that 16% of the Trump votes did not revealed they true decision on surveys until the election. Therefore, the prediction may be underestimated for Trump through modeling with the current data.
+
+## Next Steps
+
+Next Step：
+1-    Suggestion for survey question. Another factor that should be added to the survey and could be used in analysis is about the social circle (Key, 2020), which is to ask: “To whom do you think people around you will vote?” This is because through asking about people’s expectation towards the favorability of each candidates, we can actually get exposed to a larger sample. 
+ 
+2-    Suggestion to reduce the “Shy Trump” effect. Rather than using the answer for the question “trump or Biden” directly, we can use some indirect questions such as “Will you not vote for Biden?” to reduce this bias.
+
+
+# References
+
+Coy, P. (2020). New Study Suggests Polls Are Missing Shy Trump Voters. Retrieved November 02, 2020, from https://www.bloombergquint.com/businessweek/new-study-suggests-polls-are-missing-shy-trump-voters
+ 
+Key, J., 2020, Are these experimental polling questions pointing to a Trump victory? Retrieved November 02, 2020, from https://dornsife.usc.edu/news/stories/3338/experimental-polling-point-to-trump-victory/
+
